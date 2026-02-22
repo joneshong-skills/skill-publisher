@@ -6,8 +6,8 @@ description: >-
   "generate skill logo", "發布 skill", "推送 skill", "skill 上架", "更新 skill repo",
   "產生 skill logo", mentions skill publishing, or discusses pushing skills to GitHub,
   generating bilingual READMEs, creating logos, or registering skills on documentation platforms.
-version: 0.2.0
-tools: Read, Write, Edit, Bash, Glob, Grep, WebSearch
+version: 0.3.0
+tools: Read, Write, Edit, Bash, Glob, Grep, WebSearch, sandbox_execute
 argument-hint: "[skill-name | --all | --scan]"
 ---
 
@@ -16,6 +16,10 @@ argument-hint: "[skill-name | --all | --scan]"
 Publish skills to GitHub with bilingual READMEs, logos, and platform registration.
 Handles the full lifecycle: scan status, generate READMEs, create logos, push to GitHub,
 and register on DeepWiki and Context7.
+
+## Agent Delegation
+
+Delegate publishing operations to `worker` agent.
 
 ## Configuration
 
@@ -30,6 +34,21 @@ and register on DeepWiki and Context7.
 ## Workflow
 
 ### Step 1: Scan Status
+
+> **Sandbox acceleration**: Bulk publish status scanning runs efficiently in `sandbox_execute`.
+>
+> Preferred (Sandbox):
+> ```python
+> import sys; sys.path.insert(0, '/Users/joneshong/.claude/skills/skill-publisher/scripts')
+> import scan_status
+> result = scan_status.scan_all()
+> output(result)
+> ```
+>
+> Fallback (Bash):
+> ```bash
+> python3 ~/.claude/skills/skill-publisher/scripts/scan_status.py --json
+> ```
 
 Run the scan to identify what needs publishing:
 
@@ -220,6 +239,15 @@ When the user requests `--all` or "publish all skills":
 4. Push to GitHub (create repo if needed)
 5. Trigger DeepWiki indexing
 6. Check Context7 registration
+
+## Sandbox Optimization
+
+This skill is **sandbox-optimized**. Batch operations run inside `sandbox_execute`:
+
+- **Publish status scan**: Import `scripts/scan_status.py` in sandbox to batch-check README, logo, GitHub, and git status for all skills in one call
+- **Batch status reporting**: Aggregate scan results across all skills and return structured JSON for pipeline consumption
+
+Principle: **Deterministic batch work → sandbox; reasoning/presentation → LLM.**
 
 ## Continuous Improvement
 
