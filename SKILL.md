@@ -4,6 +4,7 @@ description: "publisher, publish, skills, push, github, update, repos"
 version: 0.3.0
 tools: Read, Write, Edit, Bash, Glob, Grep, WebSearch, sandbox_execute
 argument-hint: "[skill-name | --all | --scan]"
+disable-model-invocation: true
 ---
 
 # Skill Publisher
