@@ -2,7 +2,7 @@
 """publish.py — Deterministic git + platform registration for skill-publisher
 
 Usage:
-  publish.py <skill-name> [--dry-run] [--skip-logo] [--skip-register]
+  publish.py <skill-name> [--dry-run] [--skip-logo] [--register-note]
   publish.py --scan [--json]
 """
 
@@ -13,8 +13,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -169,7 +167,7 @@ def preflight_secrets_pii(skill_dir):
     ok("Secrets/PII preflight passed (gitleaks + personal-path scan)")
 
 
-def publish_skill(skill_name: str, dry_run: bool, skip_logo: bool, skip_register: bool):
+def publish_skill(skill_name: str, dry_run: bool, skip_logo: bool, register_note: bool):
     skill_dir = SKILLS_DIR / skill_name
 
     print()
@@ -300,7 +298,7 @@ def publish_skill(skill_name: str, dry_run: bool, skip_logo: bool, skip_register
     )
 
     r = run_git(["diff", "--cached", "--name-only"], cwd=str(skill_dir))
-    staged_files = [l for l in r.stdout.splitlines() if l.strip()]
+    staged_files = [line for line in r.stdout.splitlines() if line.strip()]
     staged_count = len(staged_files)
 
     if staged_count == 0:
@@ -411,49 +409,37 @@ def publish_skill(skill_name: str, dry_run: bool, skip_logo: bool, skip_register
                 warn("Skipped push.")
 
     # ── Step 9: Platform registration ────────────────────────────────────────
-    if not skip_register:
+    # Neither platform can be registered from a script. This step used to GET
+    # the DeepWiki page and report "triggered (HTTP 200)" — DeepWiki answers 200
+    # for any URL, including repos that do not exist, so all 123 of those
+    # successes were fictional and every repo stayed unindexed. It now performs
+    # no network calls by default and only prints the manual steps.
+    if register_note:
         print()
-        info("Registering on platforms...")
-
-        deepwiki_url = f"https://deepwiki.com/{GITHUB_ORG}/{skill_name}"
-
-        if dry_run:
-            dry(f'Would trigger DeepWiki indexing: curl -s "{deepwiki_url}"')
-            dry("Would print Context7 manual submission note")
-        else:
-            info(f"Triggering DeepWiki indexing: {deepwiki_url}")
-            try:
-                req = urllib.request.Request(deepwiki_url)
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    http_status = resp.status
-            except urllib.error.HTTPError as e:
-                http_status = e.code
-            except Exception:
-                http_status = 0
-
-            if str(http_status).startswith(("2", "3")):
-                ok(f"DeepWiki triggered (HTTP {http_status}): {deepwiki_url}")
-            else:
-                warn(
-                    f"DeepWiki returned HTTP {http_status} — indexing may take a few minutes."
-                )
-
-            print()
-            print(f"{YELLOW}[Context7]{RESET} Manual submission required:")
-            print("  1. Visit: https://context7.com/")
-            print(f"  2. Submit: https://github.com/{GITHUB_ORG}/{skill_name}")
-            print(
-                f'  Or use MCP: mcp__context7__resolve-library-id with libraryName="{skill_name}"'
-            )
-    else:
-        info("Skipping platform registration (--skip-register)")
+        info("Platform registration is manual on both platforms:")
+        print()
+        print(f"{YELLOW}[DeepWiki]{RESET}")
+        print(f"  Open   : https://deepwiki.com/{GITHUB_ORG}/{skill_name}")
+        print('  Then   : click "Index Repository" (2-10 min). Loading the page does NOT start it.')
+        print(
+            "  Verify : curl -s "
+            f'"https://api.devin.ai/ada/public_repo_indexing_status?repo_name={GITHUB_ORG}%2F{skill_name}"'
+        )
+        print('           -> {"status":"completed"} indexed, {"status":"unknown"} not indexed')
+        print()
+        print(f"{YELLOW}[Context7]{RESET}")
+        print("  Open   : https://context7.com/add-library (sign in first — the source")
+        print("           buttons stay disabled while signed out)")
+        print(f"  Submit : https://github.com/{GITHUB_ORG}/{skill_name} on the GitHub tab")
+        print("  Note   : one library is processed at a time; submitting a second while")
+        print("           the first is parsing is rejected")
+        print("  Verify : it appears at https://context7.com/tasklist while processing")
 
     # ── Done ──────────────────────────────────────────────────────────────────
     print()
     print(f"{GREEN}{BOLD}=== Done: {skill_name} ==={RESET}")
     if not dry_run:
         print(f"  GitHub : https://github.com/{GITHUB_ORG}/{skill_name}")
-        print(f"  DeepWiki: https://deepwiki.com/{GITHUB_ORG}/{skill_name}")
     print()
 
 
@@ -465,7 +451,7 @@ def main():
         epilog="""Examples:
   publish.py smart-search
   publish.py smart-search --dry-run
-  publish.py smart-search --skip-logo --skip-register
+  publish.py smart-search --skip-logo --register-note
   publish.py --scan
   publish.py --scan --json
 """,
@@ -486,9 +472,11 @@ def main():
         "--skip-logo", action="store_true", help="Suppress logo.png warning"
     )
     parser.add_argument(
-        "--skip-register",
+        "--register-note",
         action="store_true",
-        help="Skip DeepWiki/Context7 registration",
+        help="Print the manual DeepWiki/Context7 submission steps. Off by "
+        "default: neither platform can be registered from a script, and the "
+        "old automatic attempt reported success without doing anything.",
     )
     parser.add_argument(
         "--scan", action="store_true", help="Scan all skills publish status"
@@ -522,7 +510,7 @@ def main():
         skill_name=args.skill_name,
         dry_run=args.dry_run,
         skip_logo=args.skip_logo,
-        skip_register=args.skip_register,
+        register_note=args.register_note,
     )
 
 
