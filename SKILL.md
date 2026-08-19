@@ -9,9 +9,10 @@ disable-model-invocation: true
 
 # Skill Publisher
 
-Publish skills to GitHub with bilingual READMEs, logos, and platform registration.
-Handles the full lifecycle: scan status, generate READMEs, create logos, push to GitHub,
-and register on DeepWiki and Context7.
+Publish skills to GitHub with bilingual READMEs and logos. Handles the lifecycle
+up to the push: scan status, generate READMEs, create logos, create the repo,
+push. Indexing on DeepWiki and Context7 is **manual and opt-in** — see Step 6
+for why automating it produced 123 false successes.
 
 ## Agent Delegation
 
@@ -205,25 +206,43 @@ git push -u origin main
 
 **Important:** Always confirm with user before creating repos or pushing.
 
-### Step 6: Register on Platforms
+### Step 6: Register on Platforms — manual, and off by default
+
+**Neither platform can be registered from a script.** `publish.py` prints
+nothing about them unless you pass `--register-note`. Do not add an automatic
+attempt back: the previous one fetched the DeepWiki page and reported
+`[OK] DeepWiki triggered (HTTP 200)`, but DeepWiki answers 200 for **any** URL
+including repos that do not exist — verified 2026-08-19 against a made-up slug.
+All 123 published repos were reported registered and none of them were.
+
+Only register a repo you actually want retrievable. Publishing does not imply it.
 
 #### DeepWiki
 
-DeepWiki auto-indexes public GitHub repos. Trigger indexing by visiting:
+Loading the page does **not** start indexing — a human has to click
+**Index Repository** on `https://deepwiki.com/joneshong-skills/[name]`
+(2-10 minutes). Never infer state from the page loading:
+
+```bash
+curl -s "https://api.devin.ai/ada/public_repo_indexing_status?repo_name=joneshong-skills%2F[name]"
+# {"status":"completed"} indexed   |   {"status":"unknown"} not indexed
 ```
-https://deepwiki.com/joneshong-skills/[name]
-```
-Use WebFetch to trigger the initial index. Verify the page loads with content.
+
+That API is the only honest signal, and it discriminates — a known-indexed repo
+(`charmbracelet/vhs`) returns `completed` while ours return `unknown`.
 
 #### Context7
 
-Context7 requires submission. Check if the library is already indexed:
-```
-mcpproxy call_tool_read(server="context7", tool="resolve-library-id", arguments={libraryName: "[name]", query: "[description]"})
-```
+Submission is a signed-in web form at `https://context7.com/add-library`
+(GitHub tab). The source buttons render **disabled** while signed out, so an
+automated pass sees a page that looks fine and can do nothing.
 
-If not found, inform the user to submit at `https://context7.com/` manually,
-or attempt submission via the Context7 MCP tool if available.
+`resolve-library-id` **queries** the index; it cannot submit. Asking it for a
+name that exists upstream returns the upstream library, which reads like
+success — checking `humanizer` returns `/blader/humanizer`, not ours.
+
+One library is processed at a time; submitting a second while the first is
+parsing is rejected outright. Watch `https://context7.com/tasklist` for state.
 
 ## Batch Mode
 
@@ -234,8 +253,11 @@ When the user requests `--all` or "publish all skills":
 3. Generate READMEs sequentially (each needs context from SKILL.md)
 4. Generate logos in parallel batches of 3 (see Step 4 § Parallel Logo Generation)
 5. Push repos one at a time (requires sequential git operations)
-6. Batch-trigger DeepWiki indexing for all new repos
-7. Report final status with re-scan
+6. Report final status with re-scan
+
+Batch mode does **not** register anything on DeepWiki or Context7 — both are
+manual and Context7 processes one library at a time, so a batch would be
+rejected after the first anyway. See Step 6.
 
 ## Quick Reference: Publish Single Skill
 
