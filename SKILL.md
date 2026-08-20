@@ -364,6 +364,6 @@ Accumulated lessons signal when to run `/skill-optimizer` for a deeper structura
 - [`references/manifest-state-conflict.md`](references/manifest-state-conflict.md) — 發布前比較 `manifest.version` vs 上一個 git tag，分類 synced / ahead / behind 三狀態，防止 double-bump
 - [`references/marker-readme-sync.md`](references/marker-readme-sync.md) — README/CATALOG 用 inline marker 自動 re-render「需要 release 時更新的區塊」，user 無需手動維護 tag pinned zip 連結
 - [`references/pr-validation-gate.md`](references/pr-validation-gate.md) — 把手動 `scan_status.py` 升級為 PR-time auto smoke-pack + manifest lint + README sync gate
-- [`references/readme-standard.md`](references/readme-standard.md) — operonlab 公開 repo 統一 README layout 標準
+- [`references/readme-standard.md`](references/readme-standard.md) — 公開 repo 的統一 README layout 標準
 
 實作這 4 件升級時，更新 `scripts/` 對應檔，然後砍掉本 v0.4 區段。

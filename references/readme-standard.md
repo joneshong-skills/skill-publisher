@@ -1,6 +1,6 @@
 # README Standard Format
 
-All open-source repos (operonlab) use this layout:
+All open-source repos use this layout:
 
 ```markdown
 # project-name
