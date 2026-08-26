@@ -183,7 +183,9 @@ def preflight_structure(skill_dir):
         # secrets boundary so absence must fail closed, this one is a structural
         # lint and the skill repos stay publishable from a machine with no
         # Claude Code CLI installed.
-        warn("claude CLI not found on PATH — structure check INDETERMINATE (not a pass).")
+        warn(
+            "claude CLI not found on PATH — structure check INDETERMINATE (not a pass)."
+        )
         return
 
     # `claude plugin validate` reads a *components* directory: the path must be
@@ -239,6 +241,40 @@ def preflight_structure(skill_dir):
         return
 
     if returncode == 1:
+        # rc 1 is overloaded: it also covers "I could not find anything to
+        # check" (bad path, no components discovered). Blocking on those folds
+        # "the check could not run" into "the skill is broken" — the wrong side
+        # of the three-state split, and it would abort a publish over an
+        # environment problem the skill has nothing to do with.
+        # Split on a filesystem fact, not on the wording. Both "the path does
+        # not exist" and "this skill has no SKILL.md" arrive as rc 1 with a
+        # discovery-shaped message and the text alone cannot separate them —
+        # but SKILL.md either exists on disk or it does not.
+        if not (skill_dir / "SKILL.md").exists():
+            err(f"{skill_dir.name}/SKILL.md 不存在，無法發布。")
+            err("  （下面那段關於 plugin manifest 的訊息與此無關——是 validate")
+            err("    找不到 SKILL.md 之後退回 plugin 模式印的。）")
+            for line in output.strip().splitlines():
+                err(f"  {line}")
+            sys.exit(1)
+
+        discovery = (
+            "file not found",
+            "no manifest found in directory",
+            "no such file or directory",
+            "is not a directory",
+        )
+        if any(m in output.lower() for m in discovery):
+            # The skill itself is intact; the validator found nothing to check.
+            # That is an environment problem, not a defect in what we publish.
+            warn(
+                "claude plugin validate found nothing to check (discovery-level rc 1)."
+            )
+            for line in output.strip().splitlines()[-6:]:
+                warn(f"  {line}")
+            warn("Structure check INDETERMINATE (not a pass).")
+            return
+
         err("claude plugin validate --strict rejected this skill:")
         for line in output.strip().splitlines():
             err(f"  {line}")
@@ -506,18 +542,26 @@ def publish_skill(skill_name: str, dry_run: bool, skip_logo: bool, register_note
         print()
         print(f"{YELLOW}[DeepWiki]{RESET}")
         print(f"  Open   : https://deepwiki.com/{GITHUB_ORG}/{skill_name}")
-        print('  Then   : click "Index Repository" (2-10 min). Loading the page does NOT start it.')
+        print(
+            '  Then   : click "Index Repository" (2-10 min). Loading the page does NOT start it.'
+        )
         print(
             "  Verify : curl -s "
             f'"https://api.devin.ai/ada/public_repo_indexing_status?repo_name={GITHUB_ORG}%2F{skill_name}"'
         )
-        print('           -> {"status":"completed"} indexed, {"status":"unknown"} not indexed')
+        print(
+            '           -> {"status":"completed"} indexed, {"status":"unknown"} not indexed'
+        )
         print()
         print(f"{YELLOW}[Context7]{RESET}")
         print("  Open   : https://context7.com/add-library (sign in first — the source")
         print("           buttons stay disabled while signed out)")
-        print(f"  Submit : https://github.com/{GITHUB_ORG}/{skill_name} on the GitHub tab")
-        print("  Note   : one library is processed at a time; submitting a second while")
+        print(
+            f"  Submit : https://github.com/{GITHUB_ORG}/{skill_name} on the GitHub tab"
+        )
+        print(
+            "  Note   : one library is processed at a time; submitting a second while"
+        )
         print("           the first is parsing is rejected")
         print("  Verify : it appears at https://context7.com/tasklist while processing")
 
