@@ -9,7 +9,9 @@ Usage:
 import argparse
 import datetime
 import json
+import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -167,6 +169,87 @@ def preflight_secrets_pii(skill_dir):
     ok("Secrets/PII preflight passed (gitleaks + personal-path scan)")
 
 
+def preflight_structure(skill_dir):
+    """Structural lint via `claude plugin validate --strict`, three-state.
+
+    A run that could not complete is reported as INDETERMINATE and never folded
+    into a pass.
+    """
+    info("Running structure preflight (claude plugin validate --strict)...")
+
+    claude_bin = shutil.which("claude")
+    if not claude_bin:
+        # Warn-not-block, unlike the gitleaks gate above: that one guards a
+        # secrets boundary so absence must fail closed, this one is a structural
+        # lint and the skill repos stay publishable from a machine with no
+        # Claude Code CLI installed.
+        warn("claude CLI not found on PATH — structure check INDETERMINATE (not a pass).")
+        return
+
+    # `claude plugin validate` reads a *components* directory: the path must be
+    # named `skills` or contain a real `skills/` subdir. Handed a bare skill
+    # directory it looks for a plugin manifest and always exits 1, so pointing
+    # it straight at skill_dir would block every publish. It also does not
+    # follow symlinks, hence a copy rather than a link. Staging this one skill
+    # keeps the verdict about this skill instead of every skill on the machine.
+    tmp_root = tempfile.mkdtemp(prefix="skillpub-validate-")
+    staged = Path(tmp_root) / "skills" / skill_dir.name
+    try:
+        try:
+            shutil.copytree(
+                skill_dir,
+                staged,
+                ignore=shutil.ignore_patterns(".git", ".worktrees", "__pycache__"),
+            )
+        except (OSError, shutil.Error) as e:
+            warn(f"Could not stage {skill_dir.name} for validation: {e}")
+            warn("Structure check INDETERMINATE (not a pass).")
+            return
+
+        # start_new_session puts the validator in its own process group so the
+        # timeout can kill anything it spawned. subprocess.run(timeout=) kills
+        # only the direct child, leaving grandchildren reparented to init.
+        proc = subprocess.Popen(
+            [claude_bin, "plugin", "validate", "--strict", tmp_root],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+        try:
+            stdout, stderr = proc.communicate(timeout=30)
+            returncode = proc.returncode
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except OSError:
+                proc.kill()
+            proc.communicate()
+            warn("claude plugin validate timed out after 30s (process group killed).")
+            warn("Structure check INDETERMINATE (not a pass).")
+            return
+    finally:
+        shutil.rmtree(tmp_root, ignore_errors=True)
+
+    # Every message names the throwaway staging path; map it back to the real one.
+    output = ((stdout or "") + (stderr or "")).replace(str(staged), str(skill_dir))
+
+    if returncode == 0:
+        ok("Structure preflight passed (claude plugin validate --strict)")
+        return
+
+    if returncode == 1:
+        err("claude plugin validate --strict rejected this skill:")
+        for line in output.strip().splitlines():
+            err(f"  {line}")
+        sys.exit(1)
+
+    warn(f"claude plugin validate exited {returncode} — neither pass nor fail.")
+    for line in output.strip().splitlines()[-10:]:
+        warn(f"  {line}")
+    warn("Structure check INDETERMINATE (not a pass).")
+
+
 def publish_skill(skill_name: str, dry_run: bool, skip_logo: bool, register_note: bool):
     skill_dir = SKILLS_DIR / skill_name
 
@@ -220,6 +303,9 @@ def publish_skill(skill_name: str, dry_run: bool, skip_logo: bool, register_note
 
     # ── Step 2.5: Secrets/PII preflight gate (fail-closed, read-only) ─────────
     preflight_secrets_pii(skill_dir)
+
+    # ── Step 2.6: Structure preflight gate (three-state, read-only) ──────────
+    preflight_structure(skill_dir)
 
     # ── Step 3: Initialize git repo ───────────────────────────────────────────
     info("Checking git repository...")
