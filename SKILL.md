@@ -172,8 +172,7 @@ git-cliff --output CHANGELOG.md
 git add CHANGELOG.md
 ```
 
-If `git-cliff` is unavailable or the repo has no tags yet, skip this step gracefully
-and note it in the lessons.md entry.
+If `git-cliff` is unavailable or the repo has no tags yet, skip this step gracefully.
 
 ### Step 5: Push to GitHub
 
@@ -283,25 +282,6 @@ Fallback (Bash):
 - `~/.local/bin/python3 ~/.claude/skills/skill-publisher/scripts/scan_status.py` — run status scan via Bash when sandbox is unavailable
 
 Principle: **Deterministic batch work → sandbox; reasoning/presentation → LLM.**
-
-## Continuous Improvement
-
-This skill evolves with each use. After every invocation:
-
-1. **Reflect** — Identify what worked, what caused friction, and any unexpected issues
-2. **Record** — Append a concise lesson to `lessons.md` in this skill's directory
-3. **Refine** — When a pattern recurs (2+ times), update SKILL.md directly
-
-### lessons.md Entry Format
-
-```
-### YYYY-MM-DD — Brief title
-- **Friction**: What went wrong or was suboptimal
-- **Fix**: How it was resolved
-- **Rule**: Generalizable takeaway for future invocations
-```
-
-Accumulated lessons signal when to run `/skill-optimizer` for a deeper structural review.
 
 ## Additional Resources
 
