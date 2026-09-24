@@ -124,7 +124,7 @@ Marker 是 invariant — 多次重跑同樣 input → 同樣 output。`render_ca
 
 ## 多語言 README 自動同步
 
-少爺場景：`README.md` (en) + `README.zh.md` (zh) 並存時，per-skill marker 在兩個檔案都 rewrite，無需手動翻譯下載連結（連結結構跨語言一致）。
+Owner 場景：`README.md` (en) + `README.zh.md` (zh) 並存時，per-skill marker 在兩個檔案都 rewrite，無需手動翻譯下載連結（連結結構跨語言一致）。
 
 `COPY` 字典只翻譯按鈕文字 + unreleased placeholder，downland URL 不翻譯。
 

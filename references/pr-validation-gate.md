@@ -6,7 +6,7 @@
 
 ## 為何重要
 
-少爺現況：發布前才用 `scan_status.py --skill <slug>` 手動掃描，發現問題已晚（PR 已 merge）。CI gate 在 PR 階段就攔截 → 還有機會在開發者本機 fix。
+Owner 現況：發布前才用 `scan_status.py --skill <slug>` 手動掃描，發現問題已晚（PR 已 merge）。CI gate 在 PR 階段就攔截 → 還有機會在開發者本機 fix。
 
 ## Reference Implementation — `.github/workflows/validate-skills.yml`
 

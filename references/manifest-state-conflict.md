@@ -14,7 +14,7 @@
 
 ## 為何重要
 
-少爺場景：開發 skill 時改了 version 但忘了 publish，下次 publish 流程若無腦 bump → 變雙倍 bump，造成 version 跳號。`ahead` 狀態正是這個情境。
+Owner 場景：開發 skill 時改了 version 但忘了 publish，下次 publish 流程若無腦 bump → 變雙倍 bump，造成 version 跳號。`ahead` 狀態正是這個情境。
 
 ## Reference Implementation (Python)
 

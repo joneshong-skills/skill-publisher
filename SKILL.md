@@ -294,7 +294,7 @@ Principle: **Deterministic batch work → sandbox; reasoning/presentation → LL
 ## Registry Workflow
 
 ### 事實源
-`~/.claude/data/skill-registry/registry.json` 是少爺自家所有 skill 的集中註冊表。**事實源是 `~/.claude/skills/<slug>/SKILL.md` 的 frontmatter + git 狀態**，registry.json 只是聚合視圖，由 bootstrap 重建，不可手改（要改 lifecycle 例外，archived/draft 標記要手動 commit registry.json）。
+`~/.claude/data/skill-registry/registry.json` 是 owner 自家所有 skill 的集中註冊表。**事實源是 `~/.claude/skills/<slug>/SKILL.md` 的 frontmatter + git 狀態**，registry.json 只是聚合視圖，由 bootstrap 重建，不可手改（要改 lifecycle 例外，archived/draft 標記要手動 commit registry.json）。
 
 ### sync_status 語意
 
