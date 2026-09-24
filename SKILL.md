@@ -32,7 +32,7 @@ Delegate publishing operations to `worker` agent.
 
 ### Step 1: Scan Status
 
-> **Sandbox acceleration**: Bulk publish status scanning runs in `sandbox_execute` — `~/.claude/` imports are now supported.
+> **Sandbox acceleration**: Bulk publish status scanning runs in `sandbox_execute`, which can import from `~/.claude/`.
 >
 > Preferred (Sandbox):
 > ```python
@@ -157,10 +157,11 @@ to dispatch sub-agents. **Limit concurrency to prevent context overflow.**
 7. Report: X/Y logos generated, list any failures
 ```
 
-**Important:** Each sub-agent runs `/image-gen` independently — each gets its
-own APFS-cloned profile via `mktemp + cp -c` (defined in image-gen's Session
-Isolation). Do NOT launch more than 3 concurrent browser sessions —
-Playwright resource contention causes failures beyond this limit.
+**Important:** `/image-gen` drives the shared master camoufox profile
+(`~/.camoufox-profiles/master`), and a profile tolerates a single writer — give
+each concurrent sub-agent its own cloned profile, or generate logos one at a time.
+Do NOT launch more than 3 concurrent browser sessions — Playwright resource
+contention causes failures beyond this limit.
 
 ### Step 4.5: Generate CHANGELOG.md
 
@@ -268,8 +269,7 @@ rejected after the first anyway. See Step 6.
 2. Generate README.md + README.zh.md
 3. Generate logo via /image-gen
 4. Push to GitHub (create repo if needed)
-5. Trigger DeepWiki indexing
-6. Check Context7 registration
+5. DeepWiki / Context7 registration stays manual and off by default — see Step 6
 
 ## Sandbox Optimization
 
@@ -335,15 +335,10 @@ Principle: **Deterministic batch work → sandbox; reasoning/presentation → LL
 跑 `render_catalog.py --target <path>` 就會在 marker 之間插入表格，不影響檔案其他內容。
 
 ### 發布前檢查
-跑 `publish.py` 前請對照 `~/.claude/rules/skill-publishing-gate.md` 的 9 條規則。
+跑 `publish.py` 前請對照 `~/.claude/references/skill-publishing-gate.md`（可公開條件／預設不公開兩節）。
 
-## v0.4 Upgrade Plan (work-in-progress, 2026-05-16)
+## v0.4 Upgrade Plan
 
-這版 SKILL.md 是 2026-05-06 archive 還原版（v0.3.0）。`references/` 內 4 份規劃文件是少爺 2026-05-16 蠶食自 `ConardLi/garden-skills` 的 release tooling 升級設計，**尚未實作**：
-
-- [`references/manifest-state-conflict.md`](references/manifest-state-conflict.md) — 發布前比較 `manifest.version` vs 上一個 git tag，分類 synced / ahead / behind 三狀態，防止 double-bump
-- [`references/marker-readme-sync.md`](references/marker-readme-sync.md) — README/CATALOG 用 inline marker 自動 re-render「需要 release 時更新的區塊」，user 無需手動維護 tag pinned zip 連結
-- [`references/pr-validation-gate.md`](references/pr-validation-gate.md) — 把手動 `scan_status.py` 升級為 PR-time auto smoke-pack + manifest lint + README sync gate
-- [`references/readme-standard.md`](references/readme-standard.md) — 公開 repo 的統一 README layout 標準
-
-實作這 4 件升級時，更新 `scripts/` 對應檔，然後砍掉本 v0.4 區段。
+Unimplemented release-tooling designs (manifest-state-conflict, marker-readme-sync,
+pr-validation-gate, readme-standard) live in `references/`; read
+[`references/v0.4-upgrade-plan.md`](references/v0.4-upgrade-plan.md) only when implementing them.
