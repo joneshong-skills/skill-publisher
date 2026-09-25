@@ -2,8 +2,11 @@
 """publish.py — Deterministic git + platform registration for skill-publisher
 
 Usage:
-  publish.py <skill-name> [--dry-run] [--skip-logo] [--register-note]
+  publish.py <skill-name> [--dry-run] [--skip-logo] [--register-note] [--yes]
   publish.py --scan [--json]
+
+Exit codes: 0 published (or dry-run), 1 error, 3 not published because a
+confirmation prompt was declined or got no input (non-interactive runs need --yes).
 """
 
 import argparse
@@ -48,6 +51,17 @@ def info(msg):
 
 def dry(msg):
     print(f"{YELLOW}[DRY-RUN]{RESET} {msg}")
+
+
+def confirm(assume_yes: bool) -> bool:
+    if assume_yes:
+        print("Proceed? [y/N] y  (--yes)")
+        return True
+    try:
+        answer = input("Proceed? [y/N] ").strip()
+    except (KeyboardInterrupt, EOFError):
+        answer = ""
+    return answer.lower().startswith("y")
 
 
 def run_git(
@@ -286,8 +300,15 @@ def preflight_structure(skill_dir):
     warn("Structure check INDETERMINATE (not a pass).")
 
 
-def publish_skill(skill_name: str, dry_run: bool, skip_logo: bool, register_note: bool):
+def publish_skill(
+    skill_name: str,
+    dry_run: bool,
+    skip_logo: bool,
+    register_note: bool,
+    assume_yes: bool = False,
+):
     skill_dir = SKILLS_DIR / skill_name
+    skipped = ""
 
     print()
     print(f"{BOLD}=== Skill Publisher: {skill_name} ==={RESET}")
@@ -461,12 +482,7 @@ def publish_skill(skill_name: str, dry_run: bool, skip_logo: bool, register_note
             print(f"{BOLD}Command to execute:{RESET}")
             print(f"  {create_cmd}")
             print()
-            try:
-                confirm = input("Proceed? [y/N] ").strip()
-            except (KeyboardInterrupt, EOFError):
-                confirm = ""
-
-            if confirm.lower().startswith("y"):
+            if confirm(assume_yes):
                 r = subprocess.run(
                     [
                         "gh",
@@ -488,6 +504,7 @@ def publish_skill(skill_name: str, dry_run: bool, skip_logo: bool, register_note
                     sys.exit(1)
             else:
                 warn("Skipped repo creation.")
+                skipped = "repo creation"
     else:
         ok(f"GitHub repo exists: https://github.com/{GITHUB_ORG}/{skill_name}")
 
@@ -513,12 +530,7 @@ def publish_skill(skill_name: str, dry_run: bool, skip_logo: bool, register_note
             print(f"{BOLD}Command to execute:{RESET}")
             print(f"  git push -u origin main  (in {skill_dir})")
             print()
-            try:
-                confirm = input("Proceed? [y/N] ").strip()
-            except (KeyboardInterrupt, EOFError):
-                confirm = ""
-
-            if confirm.lower().startswith("y"):
+            if confirm(assume_yes):
                 r = run_git(
                     ["push", "-u", "origin", "main"], cwd=str(skill_dir), capture=False
                 )
@@ -529,6 +541,14 @@ def publish_skill(skill_name: str, dry_run: bool, skip_logo: bool, register_note
                     sys.exit(1)
             else:
                 warn("Skipped push.")
+                skipped = "push"
+
+    if skipped:
+        err(
+            f"Not published: {skipped} was skipped at the prompt. "
+            "Re-run with --yes to confirm without a prompt."
+        )
+        sys.exit(3)
 
     # ── Step 9: Platform registration ────────────────────────────────────────
     # Neither platform can be registered from a script. This step used to GET
@@ -609,6 +629,12 @@ def main():
         "old automatic attempt reported success without doing anything.",
     )
     parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Confirm repo creation and push without prompting",
+    )
+    parser.add_argument(
         "--scan", action="store_true", help="Scan all skills publish status"
     )
     parser.add_argument(
@@ -641,6 +667,7 @@ def main():
         dry_run=args.dry_run,
         skip_logo=args.skip_logo,
         register_note=args.register_note,
+        assume_yes=args.yes,
     )
 
 
