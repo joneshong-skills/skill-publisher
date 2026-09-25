@@ -25,6 +25,7 @@ SYNC_BADGE = {
     "needs-update": "⚠️ needs-update",
     "draft": "📝 draft",
     "local-only": "🔒 local-only",
+    "upstream": "↩️ upstream",
 }
 
 
@@ -38,7 +39,14 @@ def render_table(skills: list[dict]) -> str:
         "| --- | --- | --- | --- | --- |",
     ]
     for s in sorted(skills, key=lambda x: x["slug"]):
-        gh = f"[link]({s['github_url']})" if s.get("github_url") else "—"
+        # the catalog is public: private repo names must not appear in it
+        visibility = s.get("visibility")
+        if visibility == "public" and s.get("github_url"):
+            gh = f"[link]({s['github_url']})"
+        elif visibility == "private":
+            gh = "🔒 private"
+        else:
+            gh = "—"
         tags = ", ".join((s.get("tags") or [])[:3]) or "—"
         sync = SYNC_BADGE.get(s.get("sync_status", "draft"), s.get("sync_status", "?"))
         lines.append(f"| `{s['slug']}` | `{s['lifecycle']}` | {sync} | {tags} | {gh} |")
