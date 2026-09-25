@@ -74,5 +74,24 @@ def test_visibility_comes_from_the_org_listing(tmp_path):
     registry = load()
     skill = skill_with_unpushed_commit(tmp_path, "https://github.com/joneshong-skills/cc-skill-demo.git")
     assert registry.build_entry(skill, {"cc-skill-demo": "PRIVATE"})["visibility"] == "private"
+    (tmp_path / "u").mkdir()
+    skill_upper = skill_with_unpushed_commit(tmp_path / "u", "https://github.com/joneshong-skills/Cc-Skill-Demo.git")
+    assert registry.build_entry(skill_upper, {"cc-skill-demo": "PRIVATE"})["visibility"] == "private"
     assert registry.build_entry(skill, {"cc-skill-demo": "PUBLIC"})["visibility"] == "public"
     assert registry.build_entry(skill, {})["visibility"] == "unknown"
+
+
+def test_list_org_repos_parses_gh_and_degrades_to_empty(monkeypatch):
+    registry = load()
+
+    def gh_ok(cmd, **kw):
+        return subprocess.CompletedProcess(cmd, 0, stdout="cc-skill-A\tPRIVATE\nimage-gen\tPUBLIC\n", stderr="")
+
+    monkeypatch.setattr(registry.subprocess, "run", gh_ok)
+    assert registry.list_org_repos() == {"cc-skill-a": "PRIVATE", "image-gen": "PUBLIC"}
+
+    def gh_fail(cmd, **kw):
+        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="not logged in")
+
+    monkeypatch.setattr(registry.subprocess, "run", gh_fail)
+    assert registry.list_org_repos() == {}
