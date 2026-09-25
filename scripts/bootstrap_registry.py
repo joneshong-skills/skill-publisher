@@ -11,12 +11,15 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import subprocess
+import sys
 from datetime import date, datetime
 from pathlib import Path
 
 import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import github_remote  # noqa: E402
 
 SKILLS_DIR = Path.home() / ".claude" / "skills"
 REGISTRY_PATH = Path.home() / ".claude" / "data" / "skill-registry" / "registry.json"
@@ -86,18 +89,18 @@ def git_status(skill_dir: Path) -> dict:
         except Exception:
             return ""
 
-    remote = run(["remote", "get-url", "origin"])
+    remote = github_remote.origin_url(skill_dir)
     last_commit = run(["log", "-1", "--format=%cI"])
     unpushed = run(["log", "@{u}..HEAD", "--oneline"])
     upstream_check = run(["rev-parse", "--abbrev-ref", "@{u}"])
 
-    github_url = None
-    if remote:
-        m = re.search(r"github\.com[:/]([^/]+/[^/.]+)", remote)
-        if m:
-            github_url = f"https://github.com/{m.group(1)}"
+    parsed = github_remote.parse(remote) if remote else None
+    github_url = f"https://github.com/{parsed[0]}/{parsed[1]}" if parsed else None
 
-    if not upstream_check:
+    if remote and not (parsed and parsed[0].lower() == GITHUB_ORG.lower()):
+        # someone else's repo (e.g. a vendored upstream): never ours to publish
+        sync = "upstream"
+    elif not upstream_check:
         sync = "draft"
     elif unpushed:
         sync = "needs-update"
@@ -155,7 +158,7 @@ def build_entry(skill_dir: Path, org_repos: set[str]) -> dict | None:
         tags = [t.strip() for t in tags.split(",") if t.strip()]
 
     git = git_status(skill_dir)
-    if not git["github_url"] and skill_dir.name in org_repos:
+    if not git["remote_url"] and skill_dir.name in org_repos:
         git["github_url"] = f"https://github.com/{GITHUB_ORG}/{skill_dir.name}"
 
     mtime = datetime.fromtimestamp(skill_md.stat().st_mtime).date().isoformat()

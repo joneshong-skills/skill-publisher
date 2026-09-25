@@ -21,6 +21,9 @@ import tempfile
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+import github_remote  # noqa: E402
+
 SKILLS_DIR = Path.home() / ".claude" / "skills"
 GITHUB_ORG = "joneshong-skills"
 
@@ -62,6 +65,23 @@ def confirm(assume_yes: bool) -> bool:
     except (KeyboardInterrupt, EOFError):
         answer = ""
     return answer.lower().startswith("y")
+
+
+def resolve_repo(skill_dir: Path, skill_name: str) -> str:
+    """Name of the repo in GITHUB_ORG to publish to.
+
+    An existing origin wins over the slug: many skills live in cc-skill-<slug>
+    repos, and looking up <slug> made publish create public duplicates. An
+    origin outside the org (a vendored upstream) is refused outright.
+    """
+    origin = github_remote.origin_url(skill_dir)
+    if not origin:
+        return skill_name
+    parsed = github_remote.parse(origin)
+    if not parsed or parsed[0].lower() != GITHUB_ORG.lower():
+        err(f"origin is {origin}, which is not in {GITHUB_ORG}. Refusing to publish it.")
+        sys.exit(1)
+    return parsed[1]
 
 
 def run_git(
@@ -358,6 +378,10 @@ def publish_skill(
         err("Pre-flight checks failed. Aborting.")
         sys.exit(1)
 
+    repo = resolve_repo(skill_dir, skill_name)
+    if repo != skill_name:
+        info(f"Publishing to origin's repo: {GITHUB_ORG}/{repo}")
+
     # ── Step 2.5: Secrets/PII preflight gate (fail-closed, read-only) ─────────
     preflight_secrets_pii(skill_dir)
 
@@ -458,19 +482,19 @@ def publish_skill(
 
     # ── Step 8: Check / create GitHub repo ───────────────────────────────────
     print()
-    info(f"Checking GitHub repo: {GITHUB_ORG}/{skill_name}...")
+    info(f"Checking GitHub repo: {GITHUB_ORG}/{repo}...")
 
     r = subprocess.run(
-        ["gh", "repo", "view", f"{GITHUB_ORG}/{skill_name}", "--json", "name"],
+        ["gh", "repo", "view", f"{GITHUB_ORG}/{repo}", "--json", "name"],
         capture_output=True,
         text=True,
     )
     repo_exists = r.returncode == 0
 
     if not repo_exists:
-        warn(f"GitHub repo does not exist: {GITHUB_ORG}/{skill_name}")
+        warn(f"GitHub repo does not exist: {GITHUB_ORG}/{repo}")
         create_cmd = (
-            f"gh repo create {GITHUB_ORG}/{skill_name} --public "
+            f"gh repo create {GITHUB_ORG}/{repo} --public "
             f'--source="{skill_dir}" --remote=origin --push'
         )
 
@@ -488,7 +512,7 @@ def publish_skill(
                         "gh",
                         "repo",
                         "create",
-                        f"{GITHUB_ORG}/{skill_name}",
+                        f"{GITHUB_ORG}/{repo}",
                         "--public",
                         f"--source={skill_dir}",
                         "--remote=origin",
@@ -497,7 +521,7 @@ def publish_skill(
                 )
                 if r.returncode == 0:
                     ok(
-                        f"Repo created and pushed: https://github.com/{GITHUB_ORG}/{skill_name}"
+                        f"Repo created and pushed: https://github.com/{GITHUB_ORG}/{repo}"
                     )
                 else:
                     err("Failed to create repo. Check gh auth status.")
@@ -506,10 +530,10 @@ def publish_skill(
                 warn("Skipped repo creation.")
                 skipped = "repo creation"
     else:
-        ok(f"GitHub repo exists: https://github.com/{GITHUB_ORG}/{skill_name}")
+        ok(f"GitHub repo exists: https://github.com/{GITHUB_ORG}/{repo}")
 
         # Ensure remote is set
-        remote_url = f"https://github.com/{GITHUB_ORG}/{skill_name}.git"
+        remote_url = f"https://github.com/{GITHUB_ORG}/{repo}.git"
         r = run_git(["remote", "get-url", "origin"], cwd=str(skill_dir))
         current_remote = r.stdout.strip() if r.returncode == 0 else ""
 
@@ -535,7 +559,7 @@ def publish_skill(
                     ["push", "-u", "origin", "main"], cwd=str(skill_dir), capture=False
                 )
                 if r.returncode == 0:
-                    ok(f"Pushed to: https://github.com/{GITHUB_ORG}/{skill_name}")
+                    ok(f"Pushed to: https://github.com/{GITHUB_ORG}/{repo}")
                 else:
                     err("Push failed. Check your git remote and credentials.")
                     sys.exit(1)
@@ -561,13 +585,13 @@ def publish_skill(
         info("Platform registration is manual on both platforms:")
         print()
         print(f"{YELLOW}[DeepWiki]{RESET}")
-        print(f"  Open   : https://deepwiki.com/{GITHUB_ORG}/{skill_name}")
+        print(f"  Open   : https://deepwiki.com/{GITHUB_ORG}/{repo}")
         print(
             '  Then   : click "Index Repository" (2-10 min). Loading the page does NOT start it.'
         )
         print(
             "  Verify : curl -s "
-            f'"https://api.devin.ai/ada/public_repo_indexing_status?repo_name={GITHUB_ORG}%2F{skill_name}"'
+            f'"https://api.devin.ai/ada/public_repo_indexing_status?repo_name={GITHUB_ORG}%2F{repo}"'
         )
         print(
             '           -> {"status":"completed"} indexed, {"status":"unknown"} not indexed'
@@ -577,7 +601,7 @@ def publish_skill(
         print("  Open   : https://context7.com/add-library (sign in first — the source")
         print("           buttons stay disabled while signed out)")
         print(
-            f"  Submit : https://github.com/{GITHUB_ORG}/{skill_name} on the GitHub tab"
+            f"  Submit : https://github.com/{GITHUB_ORG}/{repo} on the GitHub tab"
         )
         print(
             "  Note   : one library is processed at a time; submitting a second while"
@@ -589,7 +613,7 @@ def publish_skill(
     print()
     print(f"{GREEN}{BOLD}=== Done: {skill_name} ==={RESET}")
     if not dry_run:
-        print(f"  GitHub : https://github.com/{GITHUB_ORG}/{skill_name}")
+        print(f"  GitHub : https://github.com/{GITHUB_ORG}/{repo}")
     print()
 
 
