@@ -268,7 +268,9 @@ rejected after the first anyway. See Step 6.
 1. Scan → show status for smart-search
 2. Generate README.md + README.zh.md
 3. Generate logo via /image-gen
-4. Push to GitHub (create repo if needed)
+4. Push to GitHub (create repo if needed). `publish.py` asks before creating a repo and before
+   pushing; a declined or unanswered prompt exits 3 (not published). Non-interactive runs, such as an
+   agent's Bash, pass `--yes` once the owner has approved the push.
 5. DeepWiki / Context7 registration stays manual and off by default — see Step 6
 
 ## Sandbox Optimization
