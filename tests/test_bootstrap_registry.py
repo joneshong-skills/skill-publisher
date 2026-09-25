@@ -68,3 +68,11 @@ def test_a_foreign_remote_is_not_backfilled_with_an_org_url(tmp_path):
     entry = registry.build_entry(skill, org_repos={"demo"})
     assert entry["sync_status"] == "upstream"
     assert entry["github_url"] is None
+
+
+def test_visibility_comes_from_the_org_listing(tmp_path):
+    registry = load()
+    skill = skill_with_unpushed_commit(tmp_path, "https://github.com/joneshong-skills/cc-skill-demo.git")
+    assert registry.build_entry(skill, {"cc-skill-demo": "PRIVATE"})["visibility"] == "private"
+    assert registry.build_entry(skill, {"cc-skill-demo": "PUBLIC"})["visibility"] == "public"
+    assert registry.build_entry(skill, {})["visibility"] == "unknown"

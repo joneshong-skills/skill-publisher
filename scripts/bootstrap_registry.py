@@ -117,7 +117,8 @@ def git_status(skill_dir: Path) -> dict:
     }
 
 
-def list_org_repos() -> set[str]:
+def list_org_repos() -> dict[str, str]:
+    """{repo name: "PUBLIC" | "PRIVATE"} for the org; empty when gh is unavailable."""
     try:
         r = subprocess.run(
             [
@@ -128,22 +129,22 @@ def list_org_repos() -> set[str]:
                 "--limit",
                 "300",
                 "--json",
-                "name",
+                "name,visibility",
                 "--jq",
-                ".[].name",
+                '.[] | "\\(.name)\\t\\(.visibility)"',
             ],
             capture_output=True,
             text=True,
             timeout=15,
         )
         if r.returncode == 0:
-            return set(r.stdout.strip().split("\n")) - {""}
+            return dict(line.split("\t", 1) for line in r.stdout.splitlines() if "\t" in line)
     except Exception:
         pass
-    return set()
+    return {}
 
 
-def build_entry(skill_dir: Path, org_repos: set[str]) -> dict | None:
+def build_entry(skill_dir: Path, org_repos: dict[str, str]) -> dict | None:
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.exists():
         return None
@@ -161,6 +162,15 @@ def build_entry(skill_dir: Path, org_repos: set[str]) -> dict | None:
     if not git["remote_url"] and skill_dir.name in org_repos:
         git["github_url"] = f"https://github.com/{GITHUB_ORG}/{skill_dir.name}"
 
+    # render_catalog links only "public"; anything it cannot prove stays unlinked
+    parsed = github_remote.parse(git["github_url"]) if git["github_url"] else None
+    if not parsed:
+        visibility = None
+    elif parsed[0].lower() == GITHUB_ORG.lower():
+        visibility = org_repos.get(parsed[1], "unknown").lower()
+    else:
+        visibility = "unknown"
+
     mtime = datetime.fromtimestamp(skill_md.stat().st_mtime).date().isoformat()
     updated_at = git.get("last_commit_date") or mtime
 
@@ -173,6 +183,7 @@ def build_entry(skill_dir: Path, org_repos: set[str]) -> dict | None:
         "sync_status": git["sync_status"],
         "github_url": git["github_url"],
         "remote_url": git["remote_url"],
+        "visibility": visibility,
         "license": detect_license(skill_dir),
         "tags": tags,
         "last_synced_at": git["last_synced_at"],
@@ -186,7 +197,7 @@ def main():
     parser.add_argument("--no-gh", action="store_true", help="Skip gh org repo lookup")
     args = parser.parse_args()
 
-    org_repos = set() if args.no_gh else list_org_repos()
+    org_repos = {} if args.no_gh else list_org_repos()
     entries = []
     for d in sorted(SKILLS_DIR.iterdir()):
         if not d.is_dir() or d.name.startswith("."):
