@@ -70,9 +70,11 @@ def confirm(assume_yes: bool) -> bool:
 def resolve_repo(skill_dir: Path, skill_name: str) -> str:
     """Name of the repo in GITHUB_ORG to publish to.
 
-    An existing origin wins over the slug: many skills live in cc-skill-<slug>
-    repos, and looking up <slug> made publish create public duplicates. An
-    origin outside the org (a vendored upstream) is refused outright.
+    An existing origin wins over the slug: many skills back up to private
+    cc-skill-<slug> repos, while <slug> is either a separate public release
+    repo or nothing, and a missing <slug> sent publish down the path that
+    creates a new public repo from this checkout. An origin outside the org (a
+    vendored upstream) is refused outright.
     """
     origin = github_remote.origin_url(skill_dir)
     if not origin:
