@@ -45,9 +45,26 @@ def skill_with_unpushed_commit(tmp_path, origin_url):
     [
         ("https://github.com/browser-use/video-use.git", "upstream"),
         ("https://github.com/joneshong-skills/cc-skill-demo.git", "needs-update"),
+        ("git@github.com:joneshong-skills/demo.git", "needs-update"),
+        ("https://github.com/JonesHong-Skills/demo.git", "needs-update"),
+        ("https://gitlab.com/someone/demo.git", "upstream"),
     ],
 )
 def test_sync_status_follows_the_origin_owner(tmp_path, origin, expected):
     registry = load()
     skill = skill_with_unpushed_commit(tmp_path, origin)
     assert registry.git_status(skill)["sync_status"] == expected
+
+
+def test_dotted_repo_names_keep_their_full_url(tmp_path):
+    registry = load()
+    skill = skill_with_unpushed_commit(tmp_path, "https://github.com/joneshong-skills/foo.bar.git")
+    assert registry.git_status(skill)["github_url"] == "https://github.com/joneshong-skills/foo.bar"
+
+
+def test_a_foreign_remote_is_not_backfilled_with_an_org_url(tmp_path):
+    registry = load()
+    skill = skill_with_unpushed_commit(tmp_path, "https://gitlab.com/someone/demo.git")
+    entry = registry.build_entry(skill, org_repos={"demo"})
+    assert entry["sync_status"] == "upstream"
+    assert entry["github_url"] is None

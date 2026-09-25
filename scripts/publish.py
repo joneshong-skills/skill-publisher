@@ -13,7 +13,6 @@ import argparse
 import datetime
 import json
 import os
-import re
 import shutil
 import signal
 import subprocess
@@ -22,6 +21,9 @@ import tempfile
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+import github_remote  # noqa: E402
+
 SKILLS_DIR = Path.home() / ".claude" / "skills"
 GITHUB_ORG = "joneshong-skills"
 
@@ -72,15 +74,14 @@ def resolve_repo(skill_dir: Path, skill_name: str) -> str:
     repos, and looking up <slug> made publish create public duplicates. An
     origin outside the org (a vendored upstream) is refused outright.
     """
-    r = run_git(["remote", "get-url", "origin"], cwd=str(skill_dir))
-    origin = r.stdout.strip() if r.returncode == 0 else ""
+    origin = github_remote.origin_url(skill_dir)
     if not origin:
         return skill_name
-    m = re.search(r"github\.com[:/]([^/]+)/(.+?)(?:\.git)?/?$", origin)
-    if not m or m.group(1) != GITHUB_ORG:
+    parsed = github_remote.parse(origin)
+    if not parsed or parsed[0].lower() != GITHUB_ORG.lower():
         err(f"origin is {origin}, which is not in {GITHUB_ORG}. Refusing to publish it.")
         sys.exit(1)
-    return m.group(2)
+    return parsed[1]
 
 
 def run_git(

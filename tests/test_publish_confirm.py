@@ -174,12 +174,14 @@ def test_origin_outside_the_org_is_refused_before_touching_the_repo(
         tmp_path, monkeypatch, origin="https://github.com/browser-use/demo.git"
     )
     (skill / "LICENSE").unlink()
+    (skill / ".gitignore").unlink()
     head = git("rev-parse", "HEAD", cwd=skill).stdout
     no_prompt(monkeypatch)
     with pytest.raises(SystemExit) as exc:
         run_publish(publish, assume_yes=True)
     assert exc.value.code == 1
     assert not (skill / "LICENSE").exists()
+    assert not (skill / ".gitignore").exists()
     assert git("rev-parse", "HEAD", cwd=skill).stdout == head
     assert state["gh_calls"] == []
 
@@ -191,3 +193,32 @@ def test_no_origin_falls_back_to_the_slug(tmp_path, monkeypatch):
     with pytest.raises(SystemExit):
         run_publish(publish)
     assert state["viewed"] == ["joneshong-skills/demo"]
+
+
+def test_a_look_alike_host_is_refused(tmp_path, monkeypatch):
+    publish, state, _, _ = build(
+        tmp_path, monkeypatch, origin="https://evil.example/github.com/joneshong-skills/demo.git")
+    no_prompt(monkeypatch)
+    with pytest.raises(SystemExit) as exc:
+        run_publish(publish, assume_yes=True)
+    assert exc.value.code == 1
+    assert state["gh_calls"] == []
+
+
+def test_an_insteadof_rewrite_does_not_hide_the_org_origin(tmp_path, monkeypatch):
+    publish, state, remote_has_main, skill = build(tmp_path, monkeypatch)
+    bare = tmp_path / "remote.git"
+    git("config", f"url.{bare}.insteadOf", ORG_URL + "demo.git", cwd=skill)
+    no_prompt(monkeypatch)
+    run_publish(publish, assume_yes=True)
+    assert state["viewed"] == ["joneshong-skills/demo"]
+    assert remote_has_main()
+
+
+def test_the_org_name_is_case_insensitive(tmp_path, monkeypatch):
+    publish, state, remote_has_main, _ = build(
+        tmp_path, monkeypatch, origin="https://github.com/JonesHong-Skills/demo.git")
+    no_prompt(monkeypatch)
+    run_publish(publish, assume_yes=True)
+    assert state["viewed"] == ["joneshong-skills/demo"]
+    assert remote_has_main()
