@@ -1,8 +1,10 @@
-"""A publish that stops at the confirmation prompt must not exit 0.
+"""publish_skill() must publish to the repo origin names and must not exit 0
+when it stopped at a confirmation prompt.
 
-publish_skill() runs against a real local bare repo as origin; only `gh` and
-the two preflight gates are replaced, so "was it pushed" is read from the
-remote itself.
+Runs against a real local bare repo: origin carries the GitHub URL publish.py
+reads, and git's pushInsteadOf sends the actual push to the bare repo. Only
+`gh` and the two preflight gates are replaced, so "was it pushed" is read from
+the remote itself.
 """
 
 import builtins
@@ -13,6 +15,7 @@ from pathlib import Path
 import pytest
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "publish.py"
+ORG_URL = "https://github.com/joneshong-skills/"
 
 
 def load_publish():
@@ -24,46 +27,40 @@ def load_publish():
 
 
 def git(*args, cwd):
-    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
+    return subprocess.run(
+        ["git", *args], cwd=cwd, check=True, capture_output=True, text=True
+    )
 
 
-@pytest.fixture
-def env(tmp_path, monkeypatch):
+def build(tmp_path, monkeypatch, origin: str | None = ORG_URL + "demo.git"):
     publish = load_publish()
-    skills = tmp_path / "skills"
-    skill = skills / "demo"
+    skill = tmp_path / "skills" / "demo"
     skill.mkdir(parents=True)
     for name in ("SKILL.md", "README.md", "README.zh.md", ".gitignore", "LICENSE"):
         (skill / name).write_text(f"{name}\n")
     remote = tmp_path / "remote.git"
     git("init", "-q", "--bare", str(remote), cwd=tmp_path)
     git("init", "-q", "-b", "main", cwd=skill)
-    git("-c", "user.email=t@t", "-c", "user.name=t", "add", ".", cwd=skill)
-    git(
-        "-c",
-        "user.email=t@t",
-        "-c",
-        "user.name=t",
-        "commit",
-        "-q",
-        "-m",
-        "init",
-        cwd=skill,
-    )
-    git("remote", "add", "origin", str(remote), cwd=skill)
+    ident = ("-c", "user.email=t@t", "-c", "user.name=t")
+    git(*ident, "add", ".", cwd=skill)
+    git(*ident, "commit", "-q", "-m", "init", cwd=skill)
+    if origin:
+        git("remote", "add", "origin", origin, cwd=skill)
+        git("config", f"url.{remote}.pushInsteadOf", origin, cwd=skill)
 
-    monkeypatch.setattr(publish, "SKILLS_DIR", skills)
+    monkeypatch.setattr(publish, "SKILLS_DIR", skill.parent)
     monkeypatch.setattr(publish, "preflight_secrets_pii", lambda d: None)
     monkeypatch.setattr(publish, "preflight_structure", lambda d: None)
 
-    state = {"repo_exists": True, "gh_calls": []}
+    state = {"existing": {"joneshong-skills/demo"}, "gh_calls": [], "viewed": []}
     real_run = subprocess.run
 
     def fake_run(cmd, *a, **kw):
         if cmd and cmd[0] == "gh":
             state["gh_calls"].append(cmd[1:3])
             if cmd[1:3] == ["repo", "view"]:
-                rc = 0 if state["repo_exists"] else 1
+                state["viewed"].append(cmd[3])
+                rc = 0 if cmd[3] in state["existing"] else 1
             else:
                 rc = 0 if cmd[1:3] == ["repo", "create"] else 1
             return subprocess.CompletedProcess(cmd, rc, stdout="", stderr="")
@@ -78,11 +75,22 @@ def env(tmp_path, monkeypatch):
         )
         return r.returncode == 0
 
+    return publish, state, remote_has_main, skill
+
+
+@pytest.fixture
+def env(tmp_path, monkeypatch):
+    publish, state, remote_has_main, _ = build(tmp_path, monkeypatch)
     return publish, state, remote_has_main
 
 
 def run_publish(publish, **kw):
-    kwargs = {"skill_name": "demo", "dry_run": False, "skip_logo": True, "register_note": False}
+    kwargs = {
+        "skill_name": "demo",
+        "dry_run": False,
+        "skip_logo": True,
+        "register_note": False,
+    }
     kwargs.update(kw)
     publish.publish_skill(**kwargs)
 
@@ -94,6 +102,13 @@ def answer(monkeypatch, reply):
         return reply
 
     monkeypatch.setattr(builtins, "input", fake_input)
+
+
+def no_prompt(monkeypatch):
+    def fail(prompt=""):
+        raise AssertionError("--yes must not prompt")
+
+    monkeypatch.setattr(builtins, "input", fail)
 
 
 @pytest.mark.parametrize("reply", [EOFError, "n", ""])
@@ -108,7 +123,7 @@ def test_declined_push_exits_nonzero_and_pushes_nothing(env, monkeypatch, reply)
 
 def test_declined_repo_creation_exits_nonzero(env, monkeypatch):
     publish, state, _ = env
-    state["repo_exists"] = False
+    state["existing"] = set()
     answer(monkeypatch, EOFError)
     with pytest.raises(SystemExit) as exc:
         run_publish(publish)
@@ -118,7 +133,7 @@ def test_declined_repo_creation_exits_nonzero(env, monkeypatch):
 
 def test_confirmed_repo_creation_finishes_with_exit_0(env, monkeypatch):
     publish, state, _ = env
-    state["repo_exists"] = False
+    state["existing"] = set()
     answer(monkeypatch, "y")
     run_publish(publish)
     assert ["repo", "create"] in state["gh_calls"]
@@ -126,11 +141,7 @@ def test_confirmed_repo_creation_finishes_with_exit_0(env, monkeypatch):
 
 def test_assume_yes_pushes_without_prompting(env, monkeypatch):
     publish, _, remote_has_main = env
-
-    def no_prompt(prompt=""):
-        raise AssertionError("--yes must not prompt")
-
-    monkeypatch.setattr(builtins, "input", no_prompt)
+    no_prompt(monkeypatch)
     run_publish(publish, assume_yes=True)
     assert remote_has_main()
 
@@ -142,3 +153,41 @@ def test_yes_flag_reaches_publish_skill(monkeypatch):
     monkeypatch.setattr("sys.argv", ["publish.py", "demo", "--yes"])
     publish.main()
     assert seen["assume_yes"] is True
+
+
+def test_origin_repo_name_wins_over_the_slug(tmp_path, monkeypatch):
+    publish, state, remote_has_main, _ = build(
+        tmp_path, monkeypatch, origin=ORG_URL + "cc-skill-demo.git"
+    )
+    state["existing"] = {"joneshong-skills/cc-skill-demo"}
+    no_prompt(monkeypatch)
+    run_publish(publish, assume_yes=True)
+    assert state["viewed"] == ["joneshong-skills/cc-skill-demo"]
+    assert ["repo", "create"] not in state["gh_calls"]
+    assert remote_has_main()
+
+
+def test_origin_outside_the_org_is_refused_before_touching_the_repo(
+    tmp_path, monkeypatch
+):
+    publish, state, _, skill = build(
+        tmp_path, monkeypatch, origin="https://github.com/browser-use/demo.git"
+    )
+    (skill / "LICENSE").unlink()
+    head = git("rev-parse", "HEAD", cwd=skill).stdout
+    no_prompt(monkeypatch)
+    with pytest.raises(SystemExit) as exc:
+        run_publish(publish, assume_yes=True)
+    assert exc.value.code == 1
+    assert not (skill / "LICENSE").exists()
+    assert git("rev-parse", "HEAD", cwd=skill).stdout == head
+    assert state["gh_calls"] == []
+
+
+def test_no_origin_falls_back_to_the_slug(tmp_path, monkeypatch):
+    publish, state, _, _ = build(tmp_path, monkeypatch, origin=None)
+    state["existing"] = set()
+    answer(monkeypatch, EOFError)
+    with pytest.raises(SystemExit):
+        run_publish(publish)
+    assert state["viewed"] == ["joneshong-skills/demo"]

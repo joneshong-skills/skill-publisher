@@ -97,7 +97,11 @@ def git_status(skill_dir: Path) -> dict:
         if m:
             github_url = f"https://github.com/{m.group(1)}"
 
-    if not upstream_check:
+    owner = github_url.split("/")[3] if github_url else None
+    if remote and owner != GITHUB_ORG:
+        # someone else's repo (e.g. a vendored upstream): never ours to publish
+        sync = "upstream"
+    elif not upstream_check:
         sync = "draft"
     elif unpushed:
         sync = "needs-update"
