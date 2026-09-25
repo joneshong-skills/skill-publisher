@@ -56,12 +56,16 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(publish, "preflight_secrets_pii", lambda d: None)
     monkeypatch.setattr(publish, "preflight_structure", lambda d: None)
 
-    state = {"repo_exists": True}
+    state = {"repo_exists": True, "gh_calls": []}
     real_run = subprocess.run
 
     def fake_run(cmd, *a, **kw):
         if cmd and cmd[0] == "gh":
-            rc = 0 if (cmd[1:3] == ["repo", "view"] and state["repo_exists"]) else 1
+            state["gh_calls"].append(cmd[1:3])
+            if cmd[1:3] == ["repo", "view"]:
+                rc = 0 if state["repo_exists"] else 1
+            else:
+                rc = 0 if cmd[1:3] == ["repo", "create"] else 1
             return subprocess.CompletedProcess(cmd, rc, stdout="", stderr="")
         return real_run(cmd, *a, **kw)
 
@@ -98,7 +102,7 @@ def test_declined_push_exits_nonzero_and_pushes_nothing(env, monkeypatch, reply)
     answer(monkeypatch, reply)
     with pytest.raises(SystemExit) as exc:
         run_publish(publish)
-    assert exc.value.code not in (0, None)
+    assert exc.value.code == 3
     assert not remote_has_main()
 
 
@@ -108,7 +112,16 @@ def test_declined_repo_creation_exits_nonzero(env, monkeypatch):
     answer(monkeypatch, EOFError)
     with pytest.raises(SystemExit) as exc:
         run_publish(publish)
-    assert exc.value.code not in (0, None)
+    assert exc.value.code == 3
+    assert ["repo", "create"] not in state["gh_calls"]
+
+
+def test_confirmed_repo_creation_finishes_with_exit_0(env, monkeypatch):
+    publish, state, _ = env
+    state["repo_exists"] = False
+    answer(monkeypatch, "y")
+    run_publish(publish)
+    assert ["repo", "create"] in state["gh_calls"]
 
 
 def test_assume_yes_pushes_without_prompting(env, monkeypatch):
